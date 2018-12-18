@@ -259,3 +259,5 @@ def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model
         impl_vol = np.asscalar(impl_vol)
 
     return impl_vol
+
+
