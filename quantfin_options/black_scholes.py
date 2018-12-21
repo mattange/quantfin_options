@@ -16,7 +16,7 @@ import math
 DTYPE = np.float
 
 
-def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model='l', boundary=None):
+def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model='l', boundary=0.0):
     """
     Calculates the forward option price.
     In essence, this is equivalent to the standard option pricing if the discount rate is 0.
@@ -27,32 +27,32 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
 
     Parameters
     ----------
-    :param fwd: float (scalar or array_like)
+    fwd : float or ndarray of float
         Forwards.
-    :param strike: float (scalar or or array_like)
+    strike : float or ndarray of float
         Strikes.
-    :param tau: float (scalar or array_like)
+    tau : float or ndarray of float
         Times to expiry, normally in years assuming that volatilities are "per year equivalent".
-    :param sig: float (scalar or array_like)
+    sig : float or ndarray of float
         Volatilities: 0.2 for 20% or in units of forward.
-    :param opt_type: string (scalar or array_like), optional
+    opt_type : str or ndarray of str, optional
         Option type to price.
         c = call [default] | p = put | s = straddle
-    :param value_type: string, optional
+    value_type : str, optional
         Return value type: price, delta, gamma, vega, theta.
         Note that theta is the derivative with respect to time to expiry tau. I.e. for an increase in the time
         to expiry the value of the option increases. When considering the derivative with respect to time,
         change the sign of the output.
         p = price [default] | d = delta | g = gamma | v = vega | t = theta
-    :param model: string, optional
+    model : {'l', 'n', 'bn'}, optional
         Volatility model type: lognormal, normal or bounded normal.
         l = lognormal (black) [default] | n = normal | bn = bounded normal
-    :param boundary: float or None
+    boundary : float, optional
         Boundary for the bounded normal model. If model = 'bn', bound cannot be None and needs to be specified.
 
     Returns
     -------
-    :return fwd_price : float or array_like
+    fwd_price : float or array_like
         The option forward price based on the information provided.
 
     """
@@ -190,7 +190,7 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
         raise NotImplementedError("Bounded normal model not yet implemented!")
 
 
-def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model='l', boundary=None):
+def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model='l', boundary=0.0):
     """
     Calculates the implied option volatility based on the forward option price.
     No checks are done on the dimensions that need to be array_like or scalars and they need to be
@@ -201,28 +201,29 @@ def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model
 
     Parameters
     ----------
-    :param fwd_price: float (scalar or array_like)
+    fwd_price : float or ndarray of float
         Forward option price from which the implied volatility will be derived.
-    :param fwd: float (scalar or array_like)
+    fwd : float or ndarray of float
         Forwards.
-    :param strike: float (scalar or array_like)
+    strike : float or ndarray of float
         Strikes.
-    :param tau: float (scalar or array_like)
+    tau : float or ndarray of float
         Times to expiry, normally in years assuming that volatilities are "per year equivalent".
-    :param opt_type: string (scalar or array_like)
+    opt_type : str or ndarray of str
         Option type to price. Notably, to find implied volatilities the Put-Call parity will be used to convert
         in the money options to out of the money options where needed.
-    :param impl_vol_guess: float (scalar or array_like)
+        c = call | s = straddle | p = put
+    impl_vol_guess : float or ndarray of float
         Initial guess for the implied volatility.
-    :param model: string, optional
+    model : {'l', 'n', 'bn'}, optional
         Volatility model type: lognormal, normal or bounded normal.
         l = lognormal (black) [default] | n = normal | bn = bounded normal
-    :param boundary: float or None
+    boundary : float, optional
         Boundary for the bounded normal model. If model = 'bn', bound cannot be None and needs to be specified.
 
     Returns
     -------
-    :return implied_vol : float or array_like
+    implied_vol : float or ndarray of float
         The implied volatility based on the information provided.
     """
 
@@ -261,3 +262,59 @@ def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model
     return impl_vol
 
 
+def option_convert_impl_vol(fwd, strike, tau, sig, model, new_model, boundary=0.0, new_boundary=0.0):
+    """
+    Converts the implied volatility between models.
+    As models are different, the conversion is only valid for the specified conditions.
+
+    Parameters
+    ----------
+    fwd : float or ndarray of float
+        Forwards.
+    strike : float or ndarray of float
+        Strikes.
+    tau : float or ndarray of float
+        Times to expiry, normally in years assuming that volatilities are "per year equivalent".
+    sig : float or ndarray of float
+        Volatilities: 0.2 for 20% or in units of forward.
+    model : {'l', 'n', 'bn'}
+        Volatility model type: lognormal, normal or bounded normal.
+        l = lognormal (black) | n = normal | bn = bounded normal
+    boundary : float, optional
+        Boundary for the bounded normal model. If model = 'bn', bound cannot be None and needs to be specified.
+    new_model : {'l', 'n', 'bn'}
+        Volatility model type: lognormal, normal or bounded normal.
+        l = lognormal (black) | n = normal | bn = bounded normal
+    new_boundary : float, optional
+        Boundary for the bounded normal model. If model = 'bn', bound cannot be None and needs to be specified.
+
+
+    Returns
+    -------
+    implied_vol : float or ndarray of float
+        The local implied volatility based on the information provided according to the new model.
+
+    """
+
+    if new_model == model:
+        if model == 'bn' and boundary == new_boundary:
+            return sig
+
+    if type(fwd) is float or type(fwd) is np.float:
+        if fwd <= strike:
+            opt_type = 'c'
+        else:
+            opt_type = 'p'
+    if type(fwd) is np.ndarray:
+        opt_type = np.array(['c' for i in range(fwd.size)], dtype=np.str_)
+        opt_type[fwd > strike] = 'p'
+
+    fwd_price = option_fwd_value(fwd, strike, tau, sig, opt_type, value_type='p', model=model, boundary=boundary)
+    if new_model == 'n' or new_model == 'bn':
+        impl_vol_guess = np.sqrt(fwd*strike) * sig
+    elif new_model == 'l':
+        impl_vol_guess = sig / np.sqrt(fwd*strike)
+
+    implied_vol = option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, \
+                                  model=new_model, boundary = new_boundary)
+    return implied_vol
