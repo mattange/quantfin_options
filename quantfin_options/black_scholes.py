@@ -8,15 +8,15 @@ Black Scholes Formula" by Kazuhiro Iwasawa (December 2001).
 
 """
 
-from scipy.stats import norm
-from scipy.optimize import newton
 import numpy as np
 import math
+from scipy.stats import norm
+from scipy.optimize import newton
 
 DTYPE = np.float
 
 
-def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model='l', boundary=0.0):
+def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', model='l', boundary=0.0):
     """
     Calculates the forward option price.
     In essence, this is equivalent to the standard option pricing if the discount rate is 0.
@@ -33,8 +33,8 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
         Strikes.
     tau : float or ndarray of float
         Times to expiry, normally in years assuming that volatilities are "per year equivalent".
-    sig : float or ndarray of float
-        Volatilities: 0.2 for 20% or in units of forward.
+    sigma : float or ndarray of float
+        Volatilities :math:`\sigma`: 0.2 for 20% or in units of forward for normal models.
     opt_type : str or ndarray of str, optional
         Option type to price.
         c = call [default] | p = put | s = straddle
@@ -57,7 +57,7 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
 
     """
 
-    sigsqrttau = sig * np.sqrt(tau)
+    sigsqrttau = sigma * np.sqrt(tau)
 
     if model == "l":
         d_plus = 1 / sigsqrttau * (np.log(fwd / strike) + 0.5 * sigsqrttau ** 2)
@@ -72,33 +72,33 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
                 elif value_type == "d":
                     return n_d_plus
                 elif value_type == "g":
-                    return norm.pdf(d_plus) / fwd / sig / np.sqrt(tau)
+                    return norm.pdf(d_plus) / fwd / sigma / np.sqrt(tau)
                 elif value_type == "v":
                     return fwd * norm.pdf(d_plus) * np.sqrt(tau)
                 elif value_type == "t":
-                    return fwd * norm.pdf(d_plus) * sig / 2 / np.sqrt(tau)
+                    return fwd * norm.pdf(d_plus) * sigma / 2 / np.sqrt(tau)
             elif "p" == opt_type:
                 if value_type == "p":
                     return call_fwd_val - fwd + strike
                 elif value_type == "d":
                     return n_d_plus - 1
                 elif value_type == "g":
-                    return norm.pdf(d_plus) / fwd / sig / np.sqrt(tau)
+                    return norm.pdf(d_plus) / fwd / sigma / np.sqrt(tau)
                 elif value_type == "v":
                     return fwd * norm.pdf(d_plus) * np.sqrt(tau)
                 elif value_type == "t":
-                    return fwd * norm.pdf(d_plus) * sig / 2 / np.sqrt(tau)
+                    return fwd * norm.pdf(d_plus) * sigma / 2 / np.sqrt(tau)
             elif 's' == opt_type:
                 if value_type == "p":
                     return call_fwd_val + call_fwd_val - fwd + strike
                 elif value_type == "d":
                     return 2 * n_d_plus - 1
                 elif value_type == "g":
-                    return 2 * norm.pdf(d_plus) / fwd / sig / np.sqrt(tau)
+                    return 2 * norm.pdf(d_plus) / fwd / sigma / np.sqrt(tau)
                 elif value_type == "v":
                     return 2 * fwd * norm.pdf(d_plus) * np.sqrt(tau)
                 elif value_type == "t":
-                    return 2 * fwd * norm.pdf(d_plus) * sig / 2 / np.sqrt(tau)
+                    return 2 * fwd * norm.pdf(d_plus) * sigma / 2 / np.sqrt(tau)
 
         if type(opt_type) is np.ndarray:
             price = np.empty(shape=opt_type.shape, dtype=DTYPE)
@@ -108,13 +108,13 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
                 call_fwd_val = n_d_plus
                 put_fwd_val = n_d_plus - 1
             elif value_type == "g":
-                call_fwd_val = norm.pdf(d_plus) / fwd / sig / np.sqrt(tau)
+                call_fwd_val = norm.pdf(d_plus) / fwd / sigma / np.sqrt(tau)
                 put_fwd_val = call_fwd_val
             elif value_type == "v":
                 call_fwd_val = fwd * norm.pdf(d_plus) * np.sqrt(tau)
                 put_fwd_val = call_fwd_val
             elif value_type == "t":
-                call_fwd_val = fwd * norm.pdf(d_plus) * sig / 2 / np.sqrt(tau)
+                call_fwd_val = fwd * norm.pdf(d_plus) * sigma / 2 / np.sqrt(tau)
                 put_fwd_val = call_fwd_val
             price[opt_type == 'c'] = call_fwd_val[opt_type == 'c']
             price[opt_type == 'p'] = put_fwd_val[opt_type == 'p']
@@ -136,7 +136,7 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
                 elif value_type == "v":
                     return expd1 / math.sqrt(2 * math.pi) * np.sqrt(tau)
                 elif value_type == "t":
-                    return sig  * expd1 / 2 / math.sqrt(2 * math.pi * tau)
+                    return sigma * expd1 / 2 / math.sqrt(2 * math.pi * tau)
             elif "p" == opt_type:
                 n_d1 = norm.cdf(-d1)
                 if value_type == "p":
@@ -148,7 +148,7 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
                 elif value_type == "v":
                     return expd1 / math.sqrt(2 * math.pi) * np.sqrt(tau)
                 elif value_type == "t":
-                    return sig  * expd1 / 2 / math.sqrt(2 * math.pi * tau)
+                    return sigma * expd1 / 2 / math.sqrt(2 * math.pi * tau)
             elif 's' == opt_type:
                 nd1 = norm.cdf(d1)
                 n_d1 = norm.cdf(-d1)
@@ -161,7 +161,7 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
                 elif value_type == "v":
                     return 2 * expd1 / math.sqrt(2 * math.pi) * np.sqrt(tau)
                 elif value_type == "t":
-                    return 2 * sig  * expd1 / 2 / math.sqrt(2 * math.pi * tau)
+                    return 2 * sigma * expd1 / 2 / math.sqrt(2 * math.pi * tau)
         if type(opt_type) is np.ndarray:
             price = np.empty(shape=opt_type.shape, dtype=DTYPE)
             nd1 = norm.cdf(d1)
@@ -179,7 +179,7 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
                 call_fwd_val = expd1 / math.sqrt(2 * math.pi) * np.sqrt(tau)
                 put_fwd_val = expd1 / math.sqrt(2 * math.pi) * np.sqrt(tau)
             elif value_type == "t":
-                call_fwd_val = sig * expd1 / 2 / math.sqrt(2 * math.pi * tau)
+                call_fwd_val = sigma * expd1 / 2 / math.sqrt(2 * math.pi * tau)
                 put_fwd_val = call_fwd_val
             price[opt_type == 'c'] = call_fwd_val[opt_type == 'c']
             price[opt_type == 'p'] = put_fwd_val[opt_type == 'p']
@@ -187,7 +187,9 @@ def option_fwd_value(fwd, strike, tau, sig, opt_type='c', value_type='p', model=
             return price
 
     elif model == "bn":
-        raise NotImplementedError("Bounded normal model not yet implemented!")
+        raise NotImplementedError("Bounded normal model not yet implemented.")
+    else:
+        raise NotImplementedError("Model not implemented in this function.")
 
 
 def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model='l', boundary=0.0):
@@ -262,7 +264,7 @@ def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model
     return impl_vol
 
 
-def option_convert_impl_vol(fwd, strike, tau, sig, model, new_model, boundary=0.0, new_boundary=0.0):
+def option_convert_impl_vol(fwd, strike, tau, sigma, model, new_model, boundary=0.0, new_boundary=0.0):
     """
     Converts the implied volatility between models.
     As models are different, the conversion is only valid for the specified conditions.
@@ -275,18 +277,18 @@ def option_convert_impl_vol(fwd, strike, tau, sig, model, new_model, boundary=0.
         Strikes.
     tau : float or ndarray of float
         Times to expiry, normally in years assuming that volatilities are "per year equivalent".
-    sig : float or ndarray of float
-        Volatilities: 0.2 for 20% or in units of forward.
+    sigma : float or ndarray of float
+        Volatilities :math:`\sigma`: 0.2 for 20% or in units of forward.
     model : {'l', 'n', 'bn'}
         Volatility model type: lognormal, normal or bounded normal.
         l = lognormal (black) | n = normal | bn = bounded normal
     boundary : float, optional
-        Boundary for the bounded normal model. If model = 'bn', bound cannot be None and needs to be specified.
-    new_model : {'l', 'n', 'bn'}
+        Boundary for the bounded normal model. If model = 'bn', bound needs to be specified.
+    new_model : {'l', 'n', 'bn'}, optional
         Volatility model type: lognormal, normal or bounded normal.
         l = lognormal (black) | n = normal | bn = bounded normal
     new_boundary : float, optional
-        Boundary for the bounded normal model. If model = 'bn', bound cannot be None and needs to be specified.
+        Boundary for the bounded normal model. If model = 'bn', bound needs to be specified.
 
 
     Returns
@@ -298,7 +300,9 @@ def option_convert_impl_vol(fwd, strike, tau, sig, model, new_model, boundary=0.
 
     if new_model == model:
         if model == 'bn' and boundary == new_boundary:
-            return sig
+            return sigma
+        if model != 'bn':
+            return sigma
 
     if type(fwd) is float or type(fwd) is np.float:
         if fwd <= strike:
@@ -309,12 +313,10 @@ def option_convert_impl_vol(fwd, strike, tau, sig, model, new_model, boundary=0.
         opt_type = np.array(['c' for i in range(fwd.size)], dtype=np.str_)
         opt_type[fwd > strike] = 'p'
 
-    fwd_price = option_fwd_value(fwd, strike, tau, sig, opt_type, value_type='p', model=model, boundary=boundary)
+    fwd_price = option_fwd_value(fwd, strike, tau, sigma, opt_type, value_type='p', model=model, boundary=boundary)
     if new_model == 'n' or new_model == 'bn':
-        impl_vol_guess = np.sqrt(fwd*strike) * sig
+        impl_vol_guess = np.sqrt(fwd*strike) * sigma
     elif new_model == 'l':
-        impl_vol_guess = sig / np.sqrt(fwd*strike)
-
-    implied_vol = option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, \
-                                  model=new_model, boundary = new_boundary)
-    return implied_vol
+        impl_vol_guess = sigma / np.sqrt(fwd*strike)
+    return option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess,
+                           model=new_model, boundary=new_boundary)
