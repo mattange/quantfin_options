@@ -8,9 +8,13 @@ For references, see "Managing Smile Risk" by Hagan, Kumar, Lesniewski and Woodwa
 """
 
 import numpy as np
+from scipy.optimize import newton
+from scipy.stats import linregress
+
 from .black_scholes import option_convert_impl_vol
 
 DTYPE = np.float
+
 
 def impl_vol(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     """
@@ -79,7 +83,8 @@ def impl_vol(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     else:
         raise NotImplementedError("Model not implemented in this function.")
 
-def alpha(fwd, tau, sigma, beta, rho, nu, model='l', boundary=0.0):
+
+def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
     """
     Calculates the implied SABR :math:`\alpha` based on the provided :math:`\sigma` and the other SABR parameters
     for an at the money option.
@@ -93,12 +98,15 @@ def alpha(fwd, tau, sigma, beta, rho, nu, model='l', boundary=0.0):
         Times to expiry, normally in years assuming that volatilities are "per year equivalent".
     sigma : float or ndarray of float
         The volatilities backsolved from a black-scholes pricer that are used to calculate alpha.
-    beta : float or ndarray of float
+    beta : float or ndarray of float, optional.
         The :math:`\beta` parameter, to define the behaviour of the backbone.
-    rho : float or ndarray of float
+        Defaults to beta = 0.0.
+    rho : float or ndarray of float, optional.
         The Rho or correlation parameter, for correlations between asset price and volatility.
-    nu : float or ndarray of float
+        Defaults to rho = 0.0.
+    nu : float or ndarray of float, optional.
         The Nu or stochastic volatility parameter.
+        Defaults to nu = 0.0.
     model : {'l', 'n', 'bn'}, optional
         Volatility model type: lognormal, normal, boundaed normal.
         l = lognormal (black) [default] | n = normal | bn = bounded normal
@@ -112,13 +120,29 @@ def alpha(fwd, tau, sigma, beta, rho, nu, model='l', boundary=0.0):
 
     """
 
-    # then move on to find alpha with the simplified formulas
+    fwd_mod = np.atleast_1d(fwd)
+    sigma_mod = np.atleast_1d(sigma)
+    tau_mod = np.atleast_1d(tau)
+    beta_mod = np.atleast_1d(beta)
+    rho_mod = np.atleast_1d(rho)
+    nu_mod = np.atleast_1d(nu)
     if model == 'l':
-        print("l")
-    elif model == 'n':
-        print("n")
+        al_guess_mod = np.atleast_1d(sigma * fwd**(1.0 - beta))
+    elif model == 'n' or model == 'bn':
+        al_guess_mod = np.atleast_1d(sigma / fwd**beta)
     else:
         raise NotImplementedError("Model not implemented in this function.")
+
+    def func(x, pos):
+        return sigma_mod[pos] - impl_vol(fwd_mod[pos], fwd_mod[pos], tau_mod[pos], x, beta_mod[pos], rho_mod[pos],
+                                         nu_mod[pos], model, boundary)
+
+    al = np.empty(fwd_mod.shape, dtype=DTYPE)
+    for i in range(al.size):
+        al[i] = newton(func, al_guess_mod[i], args=(i,))
+    if al.size == 1:
+        al = np.asscalar(al)
+    return al
 
 
 def beta_estimate(fwd, sigma, model='l'):
@@ -147,9 +171,12 @@ def beta_estimate(fwd, sigma, model='l'):
     # and depend on time only on a small order. As a consequence, the relationship can be estimated via regression
     # on logarithms
 
+    x = np.log(fwd)
+    y = np.log(sigma)
+    slope, intercept, r_value, p_value, std_err = linregress(x, y)
     if model == 'l':
-        print("l")
+        return 1 + slope
     elif model == 'n':
-        print("n")
+        return slope
     else:
         raise NotImplementedError("Model not implemented in this function.")
