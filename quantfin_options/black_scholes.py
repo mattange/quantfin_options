@@ -14,9 +14,10 @@ from scipy.stats import norm
 from scipy.optimize import newton
 
 DTYPE = np.float
+DTYPESTR = np.str_
 
 
-def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', model='l', boundary=0.0):
+def fwd_value(fwd, k, tau, sigma, opt_type='c', value_type='p', model='l', boundary=0.0):
     """
     Calculates the forward option price.
     In essence, this is equivalent to the standard option pricing if the discount rate is 0.
@@ -29,12 +30,12 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
     ----------
     fwd : float or ndarray of float
         Forwards.
-    strike : float or ndarray of float
+    k : float or ndarray of float
         Strikes.
     tau : float or ndarray of float
-        Times to expiry, normally in years assuming that volatilities are "per year equivalent".
+        Time to expiry, normally in years assuming that volatility is "per year equivalent".
     sigma : float or ndarray of float
-        Volatilities :math:`\sigma`: 0.2 for 20% or in units of forward for normal models.
+        Volatility :math:`\sigma`: 0.2 for 20% or in units of forward for normal models.
     opt_type : str or ndarray of str, optional
         Option type to price.
         c = call [default] | p = put | s = straddle
@@ -52,20 +53,23 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
 
     Returns
     -------
-    fwd_price : float or array_like
-        The option forward price based on the information provided.
+    fwd_value : float or array_like
+        The option forward value based on the information provided.
 
     """
+
+    if value_type not in ['p', 'd', 'g', 'v', 't']:
+        raise ValueError('value_type parameter value not permitted.')
 
     sigsqrttau = sigma * np.sqrt(tau)
 
     if model == "l":
-        d_plus = 1 / sigsqrttau * (np.log(fwd / strike) + 0.5 * sigsqrttau ** 2)
+        d_plus = 1 / sigsqrttau * (np.log(fwd / k) + 0.5 * sigsqrttau ** 2)
         d_minus = d_plus - sigsqrttau
         n_d_plus = norm.cdf(d_plus)
         n_d_minus = norm.cdf(d_minus)
-        call_fwd_val = n_d_plus * fwd - n_d_minus * strike
-        if (type(opt_type) is str) or (type(opt_type) is np.str_):
+        call_fwd_val = n_d_plus * fwd - n_d_minus * k
+        if (type(opt_type) is str) or (type(opt_type) is DTYPESTR):
             if 'c' == opt_type:
                 if value_type == "p":
                     return call_fwd_val
@@ -79,7 +83,7 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
                     return fwd * norm.pdf(d_plus) * sigma / 2 / np.sqrt(tau)
             elif "p" == opt_type:
                 if value_type == "p":
-                    return call_fwd_val - fwd + strike
+                    return call_fwd_val - fwd + k
                 elif value_type == "d":
                     return n_d_plus - 1
                 elif value_type == "g":
@@ -90,7 +94,7 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
                     return fwd * norm.pdf(d_plus) * sigma / 2 / np.sqrt(tau)
             elif 's' == opt_type:
                 if value_type == "p":
-                    return call_fwd_val + call_fwd_val - fwd + strike
+                    return call_fwd_val + call_fwd_val - fwd + k
                 elif value_type == "d":
                     return 2 * n_d_plus - 1
                 elif value_type == "g":
@@ -103,7 +107,7 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
         if type(opt_type) is np.ndarray:
             price = np.empty(shape=opt_type.shape, dtype=DTYPE)
             if value_type == "p":
-                put_fwd_val = call_fwd_val - fwd + strike
+                put_fwd_val = call_fwd_val - fwd + k
             elif value_type == "d":
                 call_fwd_val = n_d_plus
                 put_fwd_val = n_d_plus - 1
@@ -122,13 +126,13 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
             return price
 
     elif model == "n":
-        d1 = (fwd - strike) / sigsqrttau
+        d1 = (fwd - k) / sigsqrttau
         expd1 = np.exp(-d1 ** 2 / 2)
-        if (type(opt_type) is str) or (type(opt_type) is np.str_):
+        if (type(opt_type) is str) or (type(opt_type) is DTYPESTR):
             if 'c' == opt_type:
                 nd1 = norm.cdf(d1)
                 if value_type == "p":
-                    return (fwd - strike) * nd1 + sigsqrttau * expd1 / math.sqrt(2 * math.pi)
+                    return (fwd - k) * nd1 + sigsqrttau * expd1 / math.sqrt(2 * math.pi)
                 elif value_type == "d":
                     return nd1
                 elif value_type == "g":
@@ -140,7 +144,7 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
             elif "p" == opt_type:
                 n_d1 = norm.cdf(-d1)
                 if value_type == "p":
-                    return (strike - fwd) * n_d1 + sigsqrttau * expd1 / math.sqrt(2 * math.pi)
+                    return (k - fwd) * n_d1 + sigsqrttau * expd1 / math.sqrt(2 * math.pi)
                 elif value_type == "d":
                     return -n_d1
                 elif value_type == "g":
@@ -153,7 +157,7 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
                 nd1 = norm.cdf(d1)
                 n_d1 = norm.cdf(-d1)
                 if value_type == "p":
-                    return (fwd - strike) * nd1 + (strike - fwd) * n_d1 + 2 * sigsqrttau * expd1 / math.sqrt(2 * math.pi)
+                    return (fwd - k) * nd1 + (k - fwd) * n_d1 + 2 * sigsqrttau * expd1 / math.sqrt(2 * math.pi)
                 elif value_type == 'd':
                     return nd1 - n_d1
                 elif value_type == "g":
@@ -167,8 +171,8 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
             nd1 = norm.cdf(d1)
             n_d1 = norm.cdf(-d1)
             if value_type == 'p':
-                call_fwd_val = (fwd - strike) * nd1 + sigsqrttau * expd1 / math.sqrt(2 * math.pi)
-                put_fwd_val = (strike - fwd) * n_d1 + sigsqrttau * expd1 / math.sqrt(2 * math.pi)
+                call_fwd_val = (fwd - k) * nd1 + sigsqrttau * expd1 / math.sqrt(2 * math.pi)
+                put_fwd_val = (k - fwd) * n_d1 + sigsqrttau * expd1 / math.sqrt(2 * math.pi)
             elif value_type == "d":
                 call_fwd_val = nd1
                 put_fwd_val = -n_d1
@@ -189,10 +193,10 @@ def option_fwd_value(fwd, strike, tau, sigma, opt_type='c', value_type='p', mode
     elif model == "bn":
         raise NotImplementedError("Bounded normal model not yet implemented.")
     else:
-        raise NotImplementedError("Model not implemented in this function.")
+        raise ValueError("model parameter value not permitted.")
 
 
-def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model='l', boundary=0.0):
+def impl_vol(fwd_price, fwd, k, tau, opt_type, sigma_guess, model='l', boundary=0.0):
     """
     Calculates the implied option volatility based on the forward option price.
     No checks are done on the dimensions that need to be array_like or scalars and they need to be
@@ -207,15 +211,15 @@ def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model
         Forward option price from which the implied volatility will be derived.
     fwd : float or ndarray of float
         Forwards.
-    strike : float or ndarray of float
+    k : float or ndarray of float
         Strikes.
     tau : float or ndarray of float
-        Times to expiry, normally in years assuming that volatilities are "per year equivalent".
+        Time to expiry, normally in years assuming that volatility is "per year equivalent".
     opt_type : str or ndarray of str
-        Option type to price. Notably, to find implied volatilities the Put-Call parity will be used to convert
+        Option type to price. Notably, to find implied volatility the Put-Call parity will be used to convert
         in the money options to out of the money options where needed.
         c = call | s = straddle | p = put
-    impl_vol_guess : float or ndarray of float
+    sigma_guess : float or ndarray of float
         Initial guess for the implied volatility.
     model : {'l', 'n', 'bn'}, optional
         Volatility model type: lognormal, normal or bounded normal.
@@ -225,7 +229,7 @@ def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model
 
     Returns
     -------
-    implied_vol : float or ndarray of float
+    sigma : float or ndarray of float
         The implied volatility based on the information provided.
     """
 
@@ -233,38 +237,35 @@ def option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess, model
     # and copy them over where needed so that values later on do not get modified
     fwd_price_mod = np.atleast_1d(np.copy(np.asanyarray(fwd_price, dtype=DTYPE)))
     fwd_mod = np.atleast_1d(np.asanyarray(fwd, dtype=DTYPE))
-    strike_mod = np.atleast_1d(np.asanyarray(strike, dtype=DTYPE))
+    k_mod = np.atleast_1d(np.asanyarray(k, dtype=DTYPE))
     tau_mod = np.atleast_1d(np.asanyarray(tau, dtype=DTYPE))
-    impl_vol_guess_mod = np.atleast_1d(np.asanyarray(impl_vol_guess, dtype=DTYPE))
-    opt_type_mod = np.atleast_1d(np.copy(np.asanyarray(opt_type, dtype=np.str_)))
+    sigma_guess_mod = np.atleast_1d(np.asanyarray(sigma_guess, dtype=DTYPE))
+    opt_type_mod = np.atleast_1d(np.copy(np.asanyarray(opt_type, dtype=DTYPESTR)))
 
     # convert with put-call parity - assuming now that the dimensions are compatible
     # a) convert calls into puts where strike is lower than fwd
-    idx = np.logical_and(opt_type == 'c', strike < fwd)
-    fwd_price_mod[idx] = fwd_price_mod[idx] - fwd_mod[idx] + strike_mod[idx]
+    idx = np.logical_and(opt_type == 'c', k < fwd)
+    fwd_price_mod[idx] = fwd_price_mod[idx] - fwd_mod[idx] + k[idx]
     opt_type_mod[idx] = 'p'
     # b) convert puts into calls where strike is higher than fwd
-    idx = np.logical_and(opt_type == 'p', strike > fwd)
-    fwd_price_mod[idx] = fwd_price_mod[idx] + fwd_mod[idx] - strike_mod[idx]
+    idx = np.logical_and(opt_type == 'p', k > fwd)
+    fwd_price_mod[idx] = fwd_price_mod[idx] + fwd_mod[idx] - k_mod[idx]
     opt_type_mod[idx] = 'c'
 
-    impl_vol = np.empty(fwd_price_mod.shape, dtype=DTYPE)
+    sigma = np.empty(fwd_price_mod.shape, dtype=DTYPE)
 
     def func(sig, pos):
-        return fwd_price_mod[pos] - option_fwd_value(fwd_mod[pos], strike_mod[pos],
-                                                     tau_mod[pos], sig, opt_type_mod[pos], model=model,
-                                                     boundary=boundary)
+        return fwd_price_mod[pos] - fwd_value(fwd_mod[pos], k_mod[pos], tau_mod[pos],
+                                              sig, opt_type_mod[pos], model=model, boundary=boundary)
 
     for i in range(fwd_price_mod.shape[0]):
-        impl_vol[i] = newton(func, impl_vol_guess_mod[i], args=(i,))
-
-    if impl_vol.size == 1:
-        impl_vol = np.asscalar(impl_vol)
-
-    return impl_vol
+        sigma[i] = newton(func, sigma_guess_mod[i], args=(i,))
+    if sigma.size == 1:
+        sigma = np.asscalar(sigma)
+    return sigma
 
 
-def option_convert_impl_vol(fwd, strike, tau, sigma, model, new_model, boundary=0.0, new_boundary=0.0):
+def convert_impl_vol(fwd, k, tau, sigma, model, new_model, boundary=0.0, new_boundary=0.0):
     """
     Converts the implied volatility between models.
     As models are different, the conversion is only valid for the specified conditions.
@@ -273,12 +274,12 @@ def option_convert_impl_vol(fwd, strike, tau, sigma, model, new_model, boundary=
     ----------
     fwd : float or ndarray of float
         Forwards.
-    strike : float or ndarray of float
+    k : float or ndarray of float
         Strikes.
     tau : float or ndarray of float
-        Times to expiry, normally in years assuming that volatilities are "per year equivalent".
+        Time to expiry, normally in years assuming that volatility is "per year equivalent".
     sigma : float or ndarray of float
-        Volatilities :math:`\sigma`: 0.2 for 20% or in units of forward.
+        Volatility :math:`\sigma`: 0.2 for 20% or in units of forward.
     model : {'l', 'n', 'bn'}
         Volatility model type: lognormal, normal or bounded normal.
         l = lognormal (black) | n = normal | bn = bounded normal
@@ -293,8 +294,8 @@ def option_convert_impl_vol(fwd, strike, tau, sigma, model, new_model, boundary=
 
     Returns
     -------
-    implied_vol : float or ndarray of float
-        The local implied volatility based on the information provided according to the new model.
+    converted_sigma : float or ndarray of float
+        The implied volatility based on the information provided according to the new model.
 
     """
 
@@ -305,18 +306,78 @@ def option_convert_impl_vol(fwd, strike, tau, sigma, model, new_model, boundary=
             return sigma
 
     if type(fwd) is float or type(fwd) is np.float:
-        if fwd <= strike:
+        if fwd <= k:
             opt_type = 'c'
         else:
             opt_type = 'p'
-    if type(fwd) is np.ndarray:
-        opt_type = np.array(['c' for i in range(fwd.size)], dtype=np.str_)
-        opt_type[fwd > strike] = 'p'
+    elif type(fwd) is np.ndarray:
+        opt_type = np.array(['c' for i in range(fwd.size)], dtype=DTYPESTR)
+        opt_type[fwd > k] = 'p'
+    else:
+        raise TypeError('fwd is not of the right type.')
 
-    fwd_price = option_fwd_value(fwd, strike, tau, sigma, opt_type, value_type='p', model=model, boundary=boundary)
+    fwd_price = fwd_value(fwd, k, tau, sigma, opt_type, value_type='p', model=model, boundary=boundary)
     if new_model == 'n' or new_model == 'bn':
-        impl_vol_guess = np.sqrt(fwd*strike) * sigma
+        sigma_guess = np.sqrt(fwd * k) * sigma
     elif new_model == 'l':
-        impl_vol_guess = sigma / np.sqrt(fwd*strike)
-    return option_impl_vol(fwd_price, fwd, strike, tau, opt_type, impl_vol_guess,
-                           model=new_model, boundary=new_boundary)
+        sigma_guess = sigma / np.sqrt(fwd * k)
+    else:
+        raise NotImplementedError("Model not implemented in this function.")
+    return impl_vol(fwd_price, fwd, k, tau, opt_type, sigma_guess,
+                    model=new_model, boundary=new_boundary)
+
+
+def impl_strike(fwd_val, fwd, tau, sigma, opt_type, k_guess, value_type='p', model='l', boundary=0.0):
+    """
+
+    Parameters
+    ----------
+    fwd_val : float or array_like
+        The option forward value that is used to find the strike, see 'value type' input.
+    fwd : float or ndarray of float
+        Forwards.
+    tau : float or ndarray of float
+        Time to expiry, normally in years assuming that volatilities are "per year equivalent".
+    sigma : float or ndarray of float
+        Volatility :math:`\sigma`: 0.2 for 20% or in units of forward.
+    opt_type : str or ndarray of str
+        Option type to which the price relates to.
+        c = call | s = straddle | p = put
+    k_guess : float or ndarray of float
+        Initial guess for the strike.
+    value_type : str, optional
+        Return value type: price, delta, gamma, vega, theta.
+        Note that theta is the derivative with respect to time to expiry tau. I.e. for an increase in the time
+        to expiry the value of the option increases. When considering the derivative with respect to time,
+        change the sign of the output.
+        p = price [default] | d = delta | g = gamma | v = vega | t = theta
+    model : {'l', 'n', 'bn'}
+        Volatility model type: lognormal, normal or bounded normal.
+        l = lognormal (black) | n = normal | bn = bounded normal
+    boundary : float, optional
+        Boundary for the bounded normal model. If model = 'bn', bound needs to be specified.
+
+    Returns
+    -------
+    k : float or ndarray of float
+        The implied strike of the option.
+
+    """
+
+    fwd_val_mod = np.atleast_1d(np.asanyarray(fwd_val, dtype=DTYPE))
+    fwd_mod = np.atleast_1d(np.asanyarray(fwd, dtype=DTYPE))
+    tau_mod = np.atleast_1d(np.asanyarray(tau, dtype=DTYPE))
+    sigma_mod = np.atleast_1d(np.asanyarray(sigma, dtype=DTYPE))
+    opt_type_mod = np.atleast_1d(np.asanyarray(opt_type, dtype=DTYPESTR))
+    k_guess_mod = np.atleast_1d(np.asanyarray(k_guess, dtype=DTYPE))
+
+    def func(kk, pos):
+        return fwd_val_mod[pos] - fwd_value(fwd_mod[pos], kk, tau_mod[pos], sigma_mod[pos], opt_type_mod[pos],
+                                            value_type=value_type, model=model, boundary=boundary)
+
+    k = np.empty(fwd_val_mod.shape, dtype=DTYPE)
+    for i in range(fwd_val_mod.shape[0]):
+        k[i] = newton(func, k_guess_mod[i], args=(i,))
+    if k.size == 1:
+        k = np.asscalar(k)
+    return k

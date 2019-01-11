@@ -11,12 +11,11 @@ import numpy as np
 from scipy.optimize import newton
 from scipy.stats import linregress
 
-from .black_scholes import option_convert_impl_vol
+from .black_scholes import convert_impl_vol
 
 DTYPE = np.float
 
-
-def impl_vol(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
+def volatility(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     """
     Returns the SABR model implied volatility to be used in Black-Scholes formula.
 
@@ -27,7 +26,7 @@ def impl_vol(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     strike : float or ndarray of float
         Strikes.
     tau : float or ndarray of float
-        Times to expiry, normally in years assuming that volatilities are "per year equivalent".
+        Time to expiry, normally in years assuming that volatilities are "per year equivalent".
     alpha : float or ndarray of float
         The :math:`\alpha` parameter, mostly influencing overall option prices, regardless of skew behaviour.
     beta : float or ndarray of float
@@ -37,7 +36,7 @@ def impl_vol(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     nu : float or ndarray of float
         The Nu or stochastic volatility parameter.
     model : {'l', 'n', 'bn'}, optional
-        Volatility model type: lognormal, normal, boundaed normal.
+        Volatility model type: lognormal, normal, bounded normal.
         l = lognormal (black) [default] | n = normal | bn = bounded normal
     boundary : float, optional
         Boundary for the bounded normal model. If model = 'bn', bound needs to be specified.
@@ -79,7 +78,7 @@ def impl_vol(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
         if model == "n":
             return sigma
         else:
-            return option_convert_impl_vol(fwd, strike, tau, sigma, 'n', 'bn', 0.0, boundary)
+            return convert_impl_vol(fwd, strike, tau, sigma, 'n', 'bn', 0.0, boundary)
     else:
         raise NotImplementedError("Model not implemented in this function.")
 
@@ -95,9 +94,9 @@ def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
     fwd : float or ndarray of float
         Forwards and strikes.
     tau : float or ndarray of float
-        Times to expiry, normally in years assuming that volatilities are "per year equivalent".
+        Time to expiry, normally in years assuming that volatilities are "per year equivalent".
     sigma : float or ndarray of float
-        The volatilities backsolved from a black-scholes pricer that are used to calculate alpha.
+        The volatility backsolved from a black-scholes pricer that are used to calculate alpha.
     beta : float or ndarray of float, optional.
         The :math:`\beta` parameter, to define the behaviour of the backbone.
         Defaults to beta = 0.0.
@@ -108,7 +107,7 @@ def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
         The Nu or stochastic volatility parameter.
         Defaults to nu = 0.0.
     model : {'l', 'n', 'bn'}, optional
-        Volatility model type: lognormal, normal, boundaed normal.
+        Volatility model type: lognormal, normal, bounded normal.
         l = lognormal (black) [default] | n = normal | bn = bounded normal
     boundary : float, optional
         Boundary for the bounded normal model. If model = 'bn', bound needs to be specified.
@@ -134,7 +133,7 @@ def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
         raise NotImplementedError("Model not implemented in this function.")
 
     def func(x, pos):
-        return sigma_mod[pos] - impl_vol(fwd_mod[pos], fwd_mod[pos], tau_mod[pos], x, beta_mod[pos], rho_mod[pos],
+        return sigma_mod[pos] - volatility(fwd_mod[pos], fwd_mod[pos], tau_mod[pos], x, beta_mod[pos], rho_mod[pos],
                                          nu_mod[pos], model, boundary)
 
     al = np.empty(fwd_mod.shape, dtype=DTYPE)
@@ -157,7 +156,7 @@ def beta_estimate(fwd, sigma, model='l'):
     sigma : ndarray of float
         The :math:`\sigma` parameter representing the at the money volatility to be used in Black-Scholes formulas.
     model : {'l', 'n'}
-        Volatility model type: lognormal, normal, boundaed normal.
+        Volatility model type: lognormal, normal.
         l = lognormal (black) [default] | n = normal
 
     Returns
@@ -180,3 +179,50 @@ def beta_estimate(fwd, sigma, model='l'):
         return slope
     else:
         raise NotImplementedError("Model not implemented in this function.")
+
+
+def calibrate(fwd, tau, skew_k, skew_sigma, beta=None, skew_weight=None, atm_sigma=None, skew_k_relative=True,
+              model='l', boundary=0.0):
+    """
+
+    Parameters
+    ----------
+    fwd : float or ndarray of float
+        Forwards.
+    tau : float or ndarray of float
+        Time to expiry, normally in years assuming that volatilities are "per year equivalent".
+    skew_k : ndarray of float
+        Strikes (relative or absolute) for which implied volatility is provided.
+    skew_sigma : ndarray of float
+        Skew implied volatility at the given strikes.
+    beta : float or ndarray of float
+        SABR :math:`\beta` that is assumed to be known and fixed for calibration of the other parameters.
+    skew_weight : ndarray of float, optional
+        Use weights on the errors of the skew implied volatilities.
+        Defaults to None, in which case all weights are assumed to be 1.
+    atm_sigma : float or ndarray of float, optional
+        Provide the quantification of the at the money volatility.
+        If this is provided, an :math:`\alpha` guess will be calculated first and then refined, if this is None
+        then :math:`\alpha` will be calculated alongside the other parameters.
+    skew_k_relative : bool, optional
+        Use the skew strikes as relative to the forward or absolute.
+        True = Strikes are relative (default) | False = Strikes are absolute
+    model : {'l', 'n', 'bn'}, optional
+        Volatility model type: lognormal, normal, bounded normal.
+        l = lognormal (black) [default] | n = normal | bn = bounded normal
+    boundary : float, optional
+        Boundary for the bounded normal model. If model = 'bn', bound needs to be specified.
+
+    Returns
+    -------
+    alpha : float or ndarray of float
+        The SABR :math:`\alpha` parameter.
+    rho : float or ndarray of float
+        The SABR :math:`\rho` parameter.
+    nu : float or ndarray of float
+        The SABR :math:`\nu` parameter.
+    err : ndarray of float
+        The calibration errors.
+
+    """
+
