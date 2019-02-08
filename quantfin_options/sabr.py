@@ -30,9 +30,9 @@ def volatility(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     tau : float or ndarray of float
         Time to expiry, normally in years assuming that volatilities are "per year equivalent".
     alpha : float or ndarray of float
-        The :math:`\alpha` parameter, mostly influencing overall option prices, regardless of skew behaviour.
+        The alpha parameter, mostly influencing overall option prices, regardless of skew behaviour.
     beta : float or ndarray of float
-        The :math:`\beta` parameter, to define the behaviour of the backbone.
+        The beta parameter, to define the behaviour of the backbone.
     rho : float or ndarray of float
         The Rho or correlation parameter, for correlations between asset price and volatility.
     nu : float or ndarray of float
@@ -46,7 +46,7 @@ def volatility(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     Returns
     -------
     sigma : float or ndarray of float
-        The volatility :math:`\sigma` to use in the standard Black-Scholes formula (assuming the same model).
+        The volatility sigma to use in the standard Black-Scholes formula (assuming the same model).
 
     """
 
@@ -58,7 +58,7 @@ def volatility(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     omb = 1 - beta
     zeta = nu / alpha * fk1_b2 * logfoverk
     xi = np.log((np.sqrt(1.0 - 2.0 * rho * zeta + zeta**2) + zeta - rho) / (1.0 - rho))
-    msk = np.abs(logfoverk) > np.finfo(DTYPE).resolution
+    msk = np.abs(xi) > 1e-6     #put boundary on where xi could get too close to 0
     zetaoverxi = np.divide(zeta, xi, out=np.ones_like(zeta), where=msk)
     if zetaoverxi.ndim == 0:
         zetaoverxi = np.asscalar(zetaoverxi)
@@ -87,7 +87,7 @@ def volatility(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
 
 def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
     """
-    Calculates the implied SABR :math:`\alpha` based on the provided :math:`\sigma` and the other SABR parameters
+    Calculates the implied SABR alpha based on the provided sigma and the other SABR parameters
     for an at the money option.
     In this formula, the assumption is used that fwd == strike and that the options are therefore at the money.
 
@@ -100,7 +100,7 @@ def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
     sigma : float or ndarray of float
         The volatility backsolved from a black-scholes pricer that are used to calculate alpha.
     beta : float or ndarray of float, optional.
-        The :math:`\beta` parameter, to define the behaviour of the backbone.
+        The beta parameter, to define the behaviour of the backbone.
         Defaults to beta = 0.0.
     rho : float or ndarray of float, optional.
         The Rho or correlation parameter, for correlations between asset price and volatility.
@@ -117,7 +117,7 @@ def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
     Returns
     -------
     alpha : float or ndarray of float
-        The :math:`\alpha` parameter for the SABR implementation.
+        The alpha parameter for the SABR implementation.
 
     """
 
@@ -148,7 +148,7 @@ def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
 
 def beta_estimate(fwd, sigma, model='l'):
     """
-    Estimates the :math:`\beta` parameter based on a linear regression of simplified SABR formulas for at the money
+    Estimates the beta parameter based on a linear regression of simplified SABR formulas for at the money
     combinations of forwards and alpha parameters representing the volatility.
 
     Parameters
@@ -156,7 +156,7 @@ def beta_estimate(fwd, sigma, model='l'):
     fwd : ndarray of float
         Forwards.
     sigma : ndarray of float
-        The :math:`\sigma` parameter representing the at the money volatility to be used in Black-Scholes formulas.
+        The sigma parameter representing the at the money volatility to be used in Black-Scholes formulas.
     model : {'l', 'n'}
         Volatility model type: lognormal, normal.
         l = lognormal (black) [default] | n = normal
@@ -164,7 +164,7 @@ def beta_estimate(fwd, sigma, model='l'):
     Returns
     -------
     beta : float
-        The regression-based estimate for the SABR :math:`\beta` parameter estimate.
+        The regression-based estimate for the SABR beta parameter estimate.
 
     """
 
@@ -187,15 +187,18 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
               skew_sigma_relative=False, fit_as_sequence=True, model='l', boundary=0.0):
     """
     Calibrates SABR parameters based on skew information. 
-    The :math:`\beta` parameter can be fixed, in which case only :math:`\alpha`, :math:`\rho` and :math:`\nu`
+    The beta parameter can be fixed, in which case only alpha, rho and nu
     will be calculated.
     Skew information can be provided both in relative terms (vs. at the money forward and at the money volatility)
     and in absolute terms.
     In case of "temporal" or "spatial" sequences, the convergence can be accelerated using the boolean
     parameter fit_as_sequence, as the loop uses the prior step converged results as starting point for the
     iterative error-minimisation procedure.
-    Parameter :math:`\rho` will be limited between -1 and 1, :math:`\alpha` and :math:`\nu` will be strictly positive
-    while :math:`\beta` can be unbounded.
+    
+    Parameter rho will be limited between -0.999 and 0.999 for numerical reasons, 
+    alpha and nu greater than 0.01% 
+    with nu limited to 10 (or 1000%) while beta will be limited between -5 and 5 (unless
+    specified).
 
     Parameters
     ----------
@@ -205,13 +208,13 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
         Time to expiry, normally in years assuming that volatilities are "per year equivalent".
     atm_sigma : float or ndarray of float
         Provide the quantification of the at the money volatility.
-        An :math:`\alpha` guess will be calculated first and then refined.
+        An alpha guess will be calculated first and then refined.
     skew_k : ndarray of float
         Strikes (relative or absolute) for which implied volatility is provided.
     skew_sigma : ndarray of float
         Skew implied volatility at the given strikes.
     beta : float or ndarray of float
-        SABR :math:`\beta` that is assumed to be known and fixed for calibration of the other parameters.
+        SABR beta that is assumed to be known and fixed for calibration of the other parameters.
     skew_weights : ndarray of float, optional
         Use weights on the errors of the skew implied volatilities.
         Defaults to None, in which case all weights are assumed to be 1.
@@ -235,15 +238,15 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
     Returns
     -------
     alpha : float or ndarray of float
-        The SABR :math:`\alpha` parameter.
+        The SABR alpha parameter.
     rho : float or ndarray of float
-        The SABR :math:`\rho` parameter.
+        The SABR rho parameter.
     nu : float or ndarray of float
-        The SABR :math:`\nu` parameter.
+        The SABR nu parameter.
     beta : float or ndarray of float
-        The SABR :math:`\beta` parameter (may be the same as the one in input).
+        The SABR beta parameter (may be the same as the one in input).
     err : ndarray of float
-        The calibration errors.
+        The squared calibration errors.
 
     """
 
@@ -264,15 +267,18 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
         skew_sigma_mod = atm_sigma_mod[:, np.newaxis] + skew_sigma_mod
 
     # Define the functions to minimize
+    e_factor = 1000
     def alphabetarhonu(x, pos):
         # x contains alpha, beta, rho, nu in this order, pos is the position
         # that we are in the loop
+        # and as volatility can be % or basis points (so numbers that are small), 
+        # i multiply the error by the factor
         v = volatility(fwd_mod[pos], skew_k_mod[pos,:], tau_mod[pos],
                        x[0], x[1], x[2], x[3], model=model, boundary=boundary)
         vatm = volatility(fwd_mod[pos], fwd_mod[pos], tau_mod[pos],
                           x[0], x[1], x[2], x[3], model=model, boundary=boundary)
         e = np.dot((skew_sigma_mod[pos, :] - v)**2, skew_weights_mod) + (atm_sigma_mod[pos] - vatm)**2
-        return e
+        return e * e_factor**2
 
     def alpharhonu(x, pos):
         # x contains alpha, rho, nu in this order, pos is the position
@@ -282,7 +288,7 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
         vatm = volatility(fwd_mod[pos], fwd_mod[pos], tau_mod[pos],
                           x[0], beta_mod[pos], x[1], x[2], model=model, boundary=boundary)
         e = np.dot((skew_sigma_mod[pos, :] - v) ** 2, skew_weights_mod) + (atm_sigma_mod[pos] - vatm)**2
-        return e
+        return e * e_factor**2
 
     alpha_out = np.empty(shape=fwd_mod.shape, dtype=DTYPE)
     rho_out = np.empty(shape=fwd_mod.shape, dtype=DTYPE)
@@ -297,12 +303,12 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
         nu_idx = 3
         x0[:, beta_idx] = 0.5  # i assign beta here but note that it will be checked later as well
         x0[:, rho_idx] = 0.0  # rho
-        x0[:, nu_idx] = 0.5  # nu
+        x0[:, nu_idx] = 0.75  # nu 75%
         x0[:, 0] = alpha(fwd_mod, tau_mod, atm_sigma_mod,
                          beta=x0[:, beta_idx], rho=x0[:, rho_idx], nu=x0[:, nu_idx],
                          model=model, boundary=boundary)
         func = alphabetarhonu
-        bnd = Bounds([0.0, -np.Inf, -1.0, 0.0], [np.Inf, np.Inf, 1.0, np.Inf])
+        bnd = Bounds([0.0001, -5, -0.999, 0.0001], [np.Inf, 5, 0.999, 10])
     else:
         # Beta is provided externally
         beta_out = beta_mod
@@ -311,12 +317,12 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
         nu_idx = 2
         beta_idx = None
         x0[:, rho_idx] = 0.0  # rho
-        x0[:, nu_idx] = 0.5  # nu
+        x0[:, nu_idx] = 0.75  # nu 75%
         x0[:, 0] = alpha(fwd_mod, tau_mod, atm_sigma_mod,
                          beta=beta_mod, rho=x0[:, rho_idx], nu=x0[:, nu_idx],
                          model=model, boundary=boundary)
         func = alpharhonu
-        bnd = Bounds([0.0, -1.0, 0.0], [np.Inf, 1.0, np.Inf])
+        bnd = Bounds([0.0001, -0.999, 0.0001], [np.Inf, 0.999, 10])
 
     for i in range(fwd_mod.size):
         x0_start = x0[i, :]
@@ -335,6 +341,7 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
                 beta_out[i] = opt_res.x[beta_idx]
             err_out[i] = opt_res.fun
         else:
+            print(i)
             raise RuntimeError(opt_res.message)
 
     if alpha_out.size == 1:
@@ -344,5 +351,5 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
         nu_out = np.asscalar(nu_out)
         err_out = np.asscalar(err_out)
 
-    return alpha_out, beta_out, rho_out, nu_out, err_out
+    return alpha_out, beta_out, rho_out, nu_out, err_out / e_factor**2
 

@@ -35,7 +35,7 @@ def fwd_value(fwd, k, tau, sigma, opt_type='c', value_type='p', model='l', bound
     tau : float or ndarray of float
         Time to expiry, normally in years assuming that volatility is "per year equivalent".
     sigma : float or ndarray of float
-        Volatility :math:`\sigma`: 0.2 for 20% or in units of forward for normal models.
+        Volatility sigma: 0.2 for 20% or in units of forward for normal models.
     opt_type : str or ndarray of str, optional
         Option type to price.
         c = call [default] | p = put | s = straddle
@@ -279,7 +279,7 @@ def convert_impl_vol(fwd, k, tau, sigma, model, new_model, boundary=0.0, new_bou
     tau : float or ndarray of float
         Time to expiry, normally in years assuming that volatility is "per year equivalent".
     sigma : float or ndarray of float
-        Volatility :math:`\sigma`: 0.2 for 20% or in units of forward.
+        Volatility sigma: 0.2 for 20% or in units of forward.
     model : {'l', 'n', 'bn'}
         Volatility model type: lognormal, normal or bounded normal.
         l = lognormal (black) | n = normal | bn = bounded normal
@@ -339,7 +339,7 @@ def impl_strike(fwd_val, fwd, tau, sigma, opt_type, k_guess, value_type='p', mod
     tau : float or ndarray of float
         Time to expiry, normally in years assuming that volatilities are "per year equivalent".
     sigma : float or ndarray of float
-        Volatility :math:`\sigma`: 0.2 for 20% or in units of forward.
+        Volatility sigma: 0.2 for 20% or in units of forward.
     opt_type : str or ndarray of str
         Option type to which the price relates to.
         c = call | s = straddle | p = put
