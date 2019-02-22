@@ -244,11 +244,15 @@ def impl_vol(fwd_price, fwd, k, tau, opt_type, sigma_guess, model='l', boundary=
 
     # convert with put-call parity - assuming now that the dimensions are compatible
     # a) convert calls into puts where strike is lower than fwd
-    idx = np.logical_and(opt_type == 'c', k < fwd)
+    opt_type_bool = opt_type_mod == 'c'
+    k_vs_fwd_bool = k_mod < fwd_mod
+    idx = opt_type_bool & k_vs_fwd_bool
     fwd_price_mod[idx] = fwd_price_mod[idx] - fwd_mod[idx] + k[idx]
     opt_type_mod[idx] = 'p'
     # b) convert puts into calls where strike is higher than fwd
-    idx = np.logical_and(opt_type == 'p', k > fwd)
+    opt_type_bool = opt_type_mod == 'p'
+    k_vs_fwd_bool = k_mod > fwd_mod
+    idx = opt_type_bool & k_vs_fwd_bool
     fwd_price_mod[idx] = fwd_price_mod[idx] + fwd_mod[idx] - k_mod[idx]
     opt_type_mod[idx] = 'c'
 

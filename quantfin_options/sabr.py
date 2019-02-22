@@ -12,10 +12,63 @@ import numpy as np
 from scipy.optimize import newton, minimize, Bounds
 from scipy.stats import linregress
 
-from .black_scholes import convert_impl_vol
+from .black_scholes import convert_impl_vol, fwd_value
 
 DTYPE = np.float
 
+def fwd_price(fwd, strike, tau, vol, beta, rho, nu, vol_type='alpha', opt_type='c', 
+              model='l', boundary=0.0):
+    """
+    Returns the forward option price based on SABR model parameters.
+    
+    Parameters
+    ----------
+    fwd : float or ndarray of float
+        Forwards.
+    strike : float or ndarray of float
+        Strikes.
+    tau : float or ndarray of float
+        Time to expiry, normally in years assuming that volatilities are "per year equivalent".
+    vol : float or ndarray of float
+        The at the money vol parameter, mostly influencing overall option prices, regardless of 
+        skew behaviour. This can be the SABR alpha parameter directly, or the at the money 
+        volatility, from which the alpha parameter will be derived.
+    beta : float or ndarray of float
+        The beta parameter, to define the behaviour of the backbone.
+    rho : float or ndarray of float
+        The Rho or correlation parameter, for correlations between asset price and volatility.
+    nu : float or ndarray of float
+        The Nu or stochastic volatility parameter.
+    vol_type : {'alpha','atmvol'}, optional, default: alpha
+        The type of the vol parameter.
+        alpha = SABR alpha | atmvol = at the money implied vol according to model.
+    opt_type : str or ndarray of str, optional
+        Option type to price.
+        c = call [default] | p = put | s = straddle
+    model : {'l', 'n', 'bn'}, optional, default: l
+        Volatility model type: lognormal, normal or bounded normal.
+        l = lognormal (black) | n = normal | bn = bounded normal
+    boundary : float, optional
+        Boundary for the bounded normal model. If model = 'bn', bound cannot be None and needs to be specified.
+
+    Returns
+    -------
+    price : float or ndarray of float
+        The forward price of the option with the given SABR parameters.
+    
+    """
+    if vol_type == 'alpha':
+        al = vol
+    else:
+        al = alpha(fwd, tau, vol, beta=beta, rho=rho, nu=nu, model=model, boundary=boundary)
+    
+    sabr_vol = volatility(fwd, strike, tau, al, beta, rho, nu, model=model, boundary=boundary)
+    price = fwd_value(fwd, strike, tau, sabr_vol, opt_type=opt_type, model=model, boundary=boundary)
+    return price
+    
+
+def fwd_risks(fwd, strike, tau, alpha, beta, rho, nu, opt_type='c', model='l', boundary=0.0):
+    raise NotImplementedError()
 
 def volatility(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
     """
@@ -85,7 +138,7 @@ def volatility(fwd, strike, tau, alpha, beta, rho, nu, model='l', boundary=0.0):
         raise NotImplementedError("Model not implemented in this function.")
 
 
-def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
+def alpha(fwd, tau, sigma, beta=1.0, rho=0.0, nu=0.0, alpha_guess=None, model='l', boundary=0.0):
     """
     Calculates the implied SABR alpha based on the provided sigma and the other SABR parameters
     for an at the money option.
@@ -99,15 +152,14 @@ def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
         Time to expiry, normally in years assuming that volatilities are "per year equivalent".
     sigma : float or ndarray of float
         The volatility backsolved from a black-scholes pricer that are used to calculate alpha.
-    beta : float or ndarray of float, optional.
+    beta : float or ndarray of float, optional, default 1.0.
         The beta parameter, to define the behaviour of the backbone.
-        Defaults to beta = 0.0.
-    rho : float or ndarray of float, optional.
+    rho : float or ndarray of float, optional, default 0.0.
         The Rho or correlation parameter, for correlations between asset price and volatility.
-        Defaults to rho = 0.0.
-    nu : float or ndarray of float, optional.
+    nu : float or ndarray of float, optional, default 0.0.
         The Nu or stochastic volatility parameter.
-        Defaults to nu = 0.0.
+    alpha_guess : float or ndarray of float, optional, default None.
+        The initial guess for alpha to get faster convergence. 
     model : {'l', 'n', 'bn'}, optional
         Volatility model type: lognormal, normal, bounded normal.
         l = lognormal (black) [default] | n = normal | bn = bounded normal
@@ -127,12 +179,15 @@ def alpha(fwd, tau, sigma, beta=0.0, rho=0.0, nu=0.0, model='l', boundary=0.0):
     beta_mod = np.atleast_1d(beta)
     rho_mod = np.atleast_1d(rho)
     nu_mod = np.atleast_1d(nu)
-    if model == 'l':
-        al_guess_mod = np.atleast_1d(sigma * fwd**(1.0 - beta))
-    elif model == 'n' or model == 'bn':
-        al_guess_mod = np.atleast_1d(sigma / fwd**beta)
+    if alpha_guess is None:
+        if model == 'l':
+            al_guess_mod = np.atleast_1d(sigma * fwd**(1.0 - beta))
+        elif model == 'n' or model == 'bn':
+            al_guess_mod = np.atleast_1d(sigma / fwd**beta)
+        else:
+            raise NotImplementedError("Model not implemented in this function.")
     else:
-        raise NotImplementedError("Model not implemented in this function.")
+        al_guess_mod = np.atleast_1d(alpha_guess)
 
     def func(x, pos):
         return sigma_mod[pos] - volatility(fwd_mod[pos], fwd_mod[pos], tau_mod[pos], x, beta_mod[pos], rho_mod[pos],
@@ -341,7 +396,6 @@ def calibrate(fwd, tau, atm_sigma, skew_k, skew_sigma, beta=None, skew_weights=N
                 beta_out[i] = opt_res.x[beta_idx]
             err_out[i] = opt_res.fun
         else:
-            print(i)
             raise RuntimeError(opt_res.message)
 
     if alpha_out.size == 1:
